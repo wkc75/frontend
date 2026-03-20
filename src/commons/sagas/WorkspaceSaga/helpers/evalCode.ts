@@ -196,27 +196,61 @@ const deriveStepperBreakpointSteps = (
   const entrypointLines = breakpointLinesByFile.get(entrypointFilePath) ?? new Set<number>();
   const breakpointSteps: number[] = [];
 
+  // check if a step lands on breakpoint
+  const markerHitsBreakpoint = (
+    marker: NonNullable<StepperOutputStep['markers']>[number]
+  ): boolean => {
+    const line = marker.redex?.loc?.start?.line;
+    if (typeof line !== 'number') {
+      return false;
+    }
+
+    const source =
+      typeof marker.redex?.loc?.source === 'string' ? marker.redex.loc.source : entrypointFilePath;
+    const lines = breakpointLinesByFile.get(source) ?? entrypointLines;
+    return lines.has(line);
+  };
+
   for (let stepIndex = 0; stepIndex < stepperSteps.length; stepIndex++) {
-    const isBreakpointStep =
-      stepperSteps[stepIndex].markers?.some(marker => {
-        if (marker.redexType !== 'beforeMarker') {
-          return false;
-        }
+    const currentStepMarkers = stepperSteps[stepIndex].markers ?? [];
 
-        const line = marker.redex?.loc?.start?.line;
-        if (typeof line !== 'number') {
-          return false;
-        }
+    const beforeMarker = currentStepMarkers.find(
+      marker => marker.redexType === 'beforeMarker' && markerHitsBreakpoint(marker)
+    );
+    if (beforeMarker) {
+      breakpointSteps.push(stepIndex);
+      continue;
+    }
 
-        const source =
-          typeof marker.redex?.loc?.source === 'string'
-            ? marker.redex.loc.source
-            : entrypointFilePath;
-        const lines = breakpointLinesByFile.get(source) ?? entrypointLines;
-        return lines.has(line);
-      }) ?? false;
+    const afterMarker = currentStepMarkers.find(
+      marker => marker.redexType === 'afterMarker' && markerHitsBreakpoint(marker)
+    );
+    if (!afterMarker) {
+      continue;
+    }
 
-    if (isBreakpointStep) {
+    const afterLine = afterMarker.redex?.loc?.start?.line;
+    const afterSource =
+      typeof afterMarker.redex?.loc?.source === 'string'
+        ? afterMarker.redex.loc.source
+        : entrypointFilePath;
+
+    const prevStepMarkers = stepperSteps[stepIndex - 1]?.markers ?? [];
+    const prevStepCoversSameLine = prevStepMarkers.some(prevMarker => {
+      if (prevMarker.redexType !== 'beforeMarker' || !markerHitsBreakpoint(prevMarker)) {
+        return false;
+      }
+
+      const prevLine = prevMarker.redex?.loc?.start?.line;
+      const prevSource =
+        typeof prevMarker.redex?.loc?.source === 'string'
+          ? prevMarker.redex.loc.source
+          : entrypointFilePath;
+
+      return prevLine === afterLine && prevSource === afterSource;
+    });
+
+    if (!prevStepCoversSameLine) {
       breakpointSteps.push(stepIndex);
     }
   }

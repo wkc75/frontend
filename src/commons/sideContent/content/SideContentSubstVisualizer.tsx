@@ -106,10 +106,10 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerPropsAST> = props => {
   // These are stored only for playground/sicp workspaces; other locations fall back to no breakpoints.
   const breakpointSteps = useTypedSelector(state => {
     const [workspaceLocation] = getLocation(props.workspaceLocation);
-    if (workspaceLocation === 'playground' || workspaceLocation === 'sicp') {
-      return state.workspaces[workspaceLocation].breakpointSteps;
+    if (workspaceLocation !== 'playground' && workspaceLocation !== 'sicp') {
+      return [];
     }
-    return [];
+    return state.workspaces[workspaceLocation].breakpointSteps;
   });
 
   // set source mode as 2
@@ -126,8 +126,6 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerPropsAST> = props => {
     }
   }, [props.content, setStepValue, alertSideContent]);
 
-  const stepFirst = () => setStepValue(1);
-  const stepLast = () => setStepValue(lastStepValue);
   const stepPrevious = () => setStepValue(Math.max(1, stepValue - 1));
   const stepNext = () => setStepValue(Math.min(props.content.length, stepValue + 1));
 
@@ -136,16 +134,7 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerPropsAST> = props => {
   // so we convert between them when comparing and updating the slider.
   const stepNextBreakpoint = () => {
     const currentStepIndex = stepValue - 1;
-    let nextBreakpointStep: number | undefined;
-
-    for (const breakpointStep of breakpointSteps) {
-      if (
-        breakpointStep > currentStepIndex &&
-        (nextBreakpointStep === undefined || breakpointStep < nextBreakpointStep)
-      ) {
-        nextBreakpointStep = breakpointStep;
-      }
-    }
+    const nextBreakpointStep = breakpointSteps.find(step => step > currentStepIndex);
 
     setStepValue(nextBreakpointStep === undefined ? lastStepValue : nextBreakpointStep + 1);
   };
@@ -153,13 +142,11 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerPropsAST> = props => {
   const stepPrevBreakpoint = () => {
     const currentStepIndex = stepValue - 1;
     let prevBreakpointStep: number | undefined;
-
-    for (const breakpointStep of breakpointSteps) {
-      if (
-        breakpointStep < currentStepIndex &&
-        (prevBreakpointStep === undefined || breakpointStep > prevBreakpointStep)
-      ) {
-        prevBreakpointStep = breakpointStep;
+    for (let i = breakpointSteps.length - 1; i >= 0; i--) {
+      const step = breakpointSteps[i];
+      if (step < currentStepIndex) {
+        prevBreakpointStep = step;
+        break;
       }
     }
 
@@ -169,10 +156,10 @@ const SideContentSubstVisualizer: React.FC<SubstVisualizerPropsAST> = props => {
   // Setup hotkey bindings
   const hotkeyBindings: HotkeyItem[] = hasRunCode
     ? [
-        ['a', stepFirst],
+        ['a', stepPrevBreakpoint],
         ['f', stepNext],
         ['b', stepPrevious],
-        ['e', stepLast]
+        ['e', stepNextBreakpoint]
       ]
     : [
         ['a', () => {}],
